@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Капча для входа</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+        }
+        .captcha-container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            text-align: center;
+            width: 300px;
+        }
+        .captcha-image {
+            margin: 10px 0;
+            max-width: 100%;
+            height: auto;
+            user-select: none;
+        }
+        h2 {
+            margin: 0 0 10px;
+            font-size: 1.5em;
+        }
+        input {
+            padding: 8px;
+            margin: 10px 0;
+            width: 200px;
+            font-size: 16px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        button {
+            padding: 10px 20px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .error {
+            color: red;
+            display: none;
+            margin-top: 10px;
+        }
+        .success {
+            color: green;
+            display: none;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="captcha-container">
+        <h2>Вход на сайт</h2>
+        <img id="captcha" class="captcha-image" src="" alt="Капча">
+        <div>
+            <button onclick="verifyCaptcha()">Проверить</button>
+        </div>
+        <input type="text" id="captchaInput" placeholder="Введите код с капчи">
+        <div id="error" class="error">Неверный код!</div>
+        <div id="success" class="success">Код верный!</div>
+    </div>
+
+    <script>
+        let attempts = 0;
+
+        function verifyCaptcha() {
+            const userInput = document.getElementById('captchaInput').value;
+            fetch('/captcha', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: 'captcha=' + encodeURIComponent(userInput) + '&attempts=' + attempts
+            })
+                .then(response => {
+                    if (response.redirected) {
+                        window.location.href = response.url;
+                    } else {
+                        return response.json();
+                    }
+                })
+                .then(data => {
+                    if (data && !data.success) {
+                        attempts = data.attempts || attempts + 1;
+                        document.getElementById('error').style.display = 'block';
+                        document.getElementById('success').style.display = 'none';
+                        document.getElementById('captchaInput').value = '';
+                        document.getElementById('captcha').src = '/captcha-image?session_id=' + data.session_id;
+                    }
+                })
+                .catch(error => console.error('Ошибка проверки капчи:', error));
+        }
+
+        // Получаем session_id из куки при загрузке страницы
+        function getCookie(name) {
+            const value = `; ${document.cookie}`;
+            const parts = value.split(`; ${name}=`);
+            if (parts.length === 2) return parts.pop().split(';').shift();
+        }
+
+        window.onload = function() {
+            const session_id = getCookie('session_id');
+            if (session_id) {
+                document.getElementById('captcha').src = '/captcha-image?session_id=' + session_id;
+            }
+        };
+    </script>
+</body>
+</html>
