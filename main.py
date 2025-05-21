@@ -12,12 +12,12 @@ app = FastAPI()
 templates = Jinja2Templates(directory="templates")
 
 captcha_store = {}
+image_store = {}  # Хранилище байтов случайных изображений
 
 class CaptchaResponse(BaseModel):
     success: bool
     message: str | None = None
     session_id: str | None = None
-    attempts: int | None = None
 
 def generate_captcha_text(length: int = 6) -> str:
     characters = string.ascii_letters + string.digits
@@ -75,6 +75,24 @@ def generate_captcha_image(captcha_text: str) -> tuple[io.BytesIO, str]:
     img_byte_arr.seek(0)
     return img_byte_arr, captcha_text
 
+def generate_random_image(session_id: str) -> io.BytesIO:
+    width, height = 300, 200
+    image = Image.new("RGB", (width, height), (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255)))
+    draw = ImageDraw.Draw(image)
+    for _ in range(50):
+        x1 = random.randint(0, width)
+        y1 = random.randint(0, height)
+        x2 = random.randint(0, width)
+        y2 = random.randint(0, height)
+        draw.line((x1, y1, x2, y2), fill=(random.randint(0, 255), random.randint(0, 255), random.randint(0, 255)), width=2)
+    
+    # Сохраняем изображение в байты вместо файла
+    img_byte_arr = io.BytesIO()
+    image.save(img_byte_arr, format="PNG")
+    img_byte_arr.seek(0)
+    image_store[session_id] = img_byte_arr
+    return img_byte_arr
+
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
     captcha_text = generate_captcha_text()
@@ -86,8 +104,12 @@ async def index(request: Request):
 
 @app.get("/success")
 async def success(request: Request):
-    attempts = request.query_params.get("attempts", "неизвестно")
-    return templates.TemplateResponse("success.html", {"request": request, "attempts": attempts})
+    session_id = request.cookies.get("session_id")
+    if session_id and session_id in captcha_store:
+        del captcha_store[session_id]  # Очищаем капчу после успеха
+    if session_id:
+        generate_random_image(session_id)
+    return templates.TemplateResponse("success.html", {"request": request})
 
 @app.get("/captcha-image")
 async def get_captcha_image(session_id: str):
@@ -96,11 +118,17 @@ async def get_captcha_image(session_id: str):
     img_byte_arr, _ = generate_captcha_image(captcha_store[session_id])
     return Response(content=img_byte_arr.getvalue(), media_type="image/png")
 
+@app.get("/random-image")
+async def get_random_image(session_id: str):
+    if session_id not in image_store:
+        raise HTTPException(status_code=400, detail="Изображение не найдено")
+    img_byte_arr = image_store[session_id]
+    return Response(content=img_byte_arr.getvalue(), media_type="image/png")
+
 @app.post("/captcha")
 async def verify_captcha(request: Request, response: Response):
     form_data = await request.form()
     user_input = form_data.get("captcha", "")
-    attempts = int(form_data.get("attempts", 0)) + 1
     session_id = request.cookies.get("session_id")
 
     if not session_id or session_id not in captcha_store:
@@ -108,9 +136,8 @@ async def verify_captcha(request: Request, response: Response):
 
     stored_captcha = captcha_store[session_id]
     if user_input == stored_captcha:
-        del captcha_store[session_id]
         response.delete_cookie("session_id")
-        return RedirectResponse(url=f"/success?attempts={attempts}", status_code=303)
+        return RedirectResponse(url="/success", status_code=303)
     else:
         new_captcha_text = generate_captcha_text()
         new_session_id = str(uuid.uuid4())
@@ -119,6 +146,5 @@ async def verify_captcha(request: Request, response: Response):
         return CaptchaResponse(
             success=False,
             message="Неверный код",
-            session_id=new_session_id,
-            attempts=attempts
+            session_id=new_session_id
         )

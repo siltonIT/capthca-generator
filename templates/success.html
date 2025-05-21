@@ -27,10 +27,6 @@
             font-size: 1.5em;
             color: green;
         }
-        p {
-            margin: 10px 0;
-            font-size: 1.2em;
-        }
         button {
             padding: 10px 20px;
             background: #007bff;
@@ -42,20 +38,17 @@
         button:hover {
             background: #0056b3;
         }
+        .random-image {
+            max-width: 100%;
+            margin-top: 20px;
+        }
     </style>
 </head>
 <body>
     <div class="success-container">
         <h2>Успешно!</h2>
-        <p>Количество попыток: <span id="attemptsCount">{{ attempts }}</span></p>
+        <img src="/random-image?session_id={{ request.cookies.get('session_id') }}" alt="Random Image" class="random-image">
         <button onclick="window.location.href='/'">Вернуться к капче</button>
     </div>
-
-    <script>
-        // Получаем количество попыток из URL
-        const urlParams = new URLSearchParams(window.location.search);
-        const attempts = urlParams.get('attempts');
-        document.getElementById('attemptsCount').textContent = attempts || 'неизвестно';
-    </script>
 </body>
 </html>
